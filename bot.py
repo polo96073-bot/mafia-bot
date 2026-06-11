@@ -173,7 +173,9 @@ def vote(call):
 
     if game["phase"] != "day":
         return
-             target = int(call.data.split("_")[1])
+
+    target = int(call.data.split("_")[1])
+
     game["votes"][user_id] = target
 
     bot.answer_callback_query(call.id, "Vote qabul qilindi")
