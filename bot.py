@@ -3,7 +3,7 @@ import random
 import threading
 import time
 
-TOKEN = "BOT_TOKENINGIZ"
+TOKEN = "8878908631:AAHxlALJDFGG_vUVVv-e7McSGAYIgo-SypY"
 bot = telebot.TeleBot(TOKEN)
 
 games = {}
