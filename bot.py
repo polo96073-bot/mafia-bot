@@ -3,8 +3,7 @@ import random
 import threading
 import time
 
-TOKEN = "8878908631:AAHxlALJDFGG_vUVVv-e7McSGAYIgo-SypY"
-
+TOKEN = "BOT_TOKENINGIZ"
 bot = telebot.TeleBot(TOKEN)
 
 games = {}
@@ -22,21 +21,19 @@ def start_game(message):
         "players": [],
         "alive": [],
         "roles": {},
-        "votes": {},
         "phase": "lobby",
-        "mafia_target": None,
-        "doctor_save": None,
-        "komissar_check": None
+        "votes": {},
+        "kill": None,
+        "save": None,
+        "check": None
     }
 
     kb = telebot.types.InlineKeyboardMarkup()
     kb.add(telebot.types.InlineKeyboardButton("🎮 Qo‘shilish", callback_data="join"))
 
-    bot.send_message(
-        chat_id,
-        "🎭 MAFIA BOSHLANDI!\n\n🎮 Qo‘shilish tugmasi\n⏳ 55 soniya",
-        reply_markup=kb
-    )
+    bot.send_message(chat_id,
+                     "🎭 MAFIA BOSHLANDI!\n⏳ 55 soniya join",
+                     reply_markup=kb)
 
     threading.Thread(target=lobby_timer, args=(chat_id,)).start()
 
@@ -80,32 +77,31 @@ def lobby_timer(chat_id):
     game["alive"] = players.copy()
     game["phase"] = "night"
 
-    bot.send_message(chat_id, "🌙 TUN BOSHLANDI!")
+    bot.send_message(chat_id, "🌙 O‘yin boshlandi!")
 
     for uid, role in assigned.items():
-        try:
-            bot.send_message(uid, f"🎭 ROLINGIZ: {role}")
-        except:
-            pass
+        bot.send_message(uid, f"🎭 ROL: {role}")
 
     night_phase(chat_id)
 
 
-# ================= NIGHT ACTIONS =================
+# ================= NIGHT =================
 def night_phase(chat_id):
     game = games[chat_id]
+    game["phase"] = "night"
     game["votes"] = {}
 
     alive = game["alive"]
 
     mafia = [u for u, r in game["roles"].items() if r == "Mafia" and u in alive]
+
     civ = [u for u in alive if u not in mafia]
 
-    game["mafia_target"] = random.choice(civ) if civ else None
-    game["doctor_save"] = random.choice(alive) if alive else None
-    game["komissar_check"] = random.choice(alive) if alive else None
+    game["kill"] = random.choice(civ) if civ else None
+    game["save"] = random.choice(alive) if alive else None
+    game["check"] = random.choice(alive) if alive else None
 
-    bot.send_message(chat_id, "🌙 Tun davom etmoqda...")
+    bot.send_message(chat_id, "🌙 Tun... hamma uxlaydi")
 
     time.sleep(10)
 
@@ -116,11 +112,13 @@ def night_phase(chat_id):
 def resolve_night(chat_id):
     game = games[chat_id]
 
-    kill = game["mafia_target"]
-    save = game["doctor_save"]
+    kill = game["kill"]
+    save = game["save"]
+    check = game["check"]
 
     msg = "🌙 TUN NATIJASI:\n"
 
+    # Mafia kill + Doctor save
     if kill and kill != save:
         if kill in game["alive"]:
             game["alive"].remove(kill)
@@ -129,7 +127,6 @@ def resolve_night(chat_id):
         msg += "🛡 Hech kim o‘lmadi\n"
 
     # Komissar check
-    check = game["komissar_check"]
     if check:
         role = game["roles"].get(check)
         msg += f"🕵 Komissar tekshirdi: {check} → {role}\n"
@@ -148,8 +145,16 @@ def day_phase(chat_id):
     game["phase"] = "day"
     game["votes"] = {}
 
+    kb = telebot.types.InlineKeyboardMarkup()
+
+    for uid in game["alive"]:
+        kb.add(telebot.types.InlineKeyboardButton(
+            f"🗳 {uid}", callback_data=f"vote_{uid}"
+        ))
+
     bot.send_message(chat_id,
-                     "☀️ KUNDUZ!\n\nOvoz berish: user_id yozing\n⏳ 20 soniya")
+                     "☀️ KUNDUZ!\nVote qiling (20s)",
+                     reply_markup=kb)
 
     time.sleep(20)
 
@@ -157,10 +162,10 @@ def day_phase(chat_id):
 
 
 # ================= VOTE =================
-@bot.message_handler(func=lambda m: True)
-def vote(message):
-    chat_id = message.chat.id
-    user_id = message.from_user.id
+@bot.callback_query_handler(func=lambda c: c.data.startswith("vote_"))
+def vote(call):
+    chat_id = call.message.chat.id
+    user_id = call.from_user.id
 
     game = games.get(chat_id)
     if not game:
@@ -168,15 +173,13 @@ def vote(message):
 
     if game["phase"] != "day":
         return
+             target = int(call.data.split("_")[1])
+    game["votes"][user_id] = target
 
-    try:
-        target = int(message.text)
-    except:
-        return
+    bot.answer_callback_query(call.id, "Vote qabul qilindi")
 
-    if target in game["alive"]:
-        game["votes"][user_id] = target
-        # ================= DAY RESULT =================
+
+# ================= DAY RESULT =================
 def resolve_day(chat_id):
     game = games[chat_id]
 
@@ -206,7 +209,9 @@ def resolve_day(chat_id):
 def check_win(chat_id):
     game = games[chat_id]
 
-    mafia = [u for u, r in game["roles"].items() if r == "Mafia" and u in game["alive"]]
+    mafia = [u for u, r in game["roles"].items()
+             if r == "Mafia" and u in game["alive"]]
+
     civ = [u for u in game["alive"] if u not in mafia]
 
     if not mafia:
